@@ -6,11 +6,12 @@ import 'package:flutter_boardview/board_list.dart';
 import 'package:flutter_boardview/boardview.dart';
 import 'package:flutter_boardview/boardview_controller.dart';
 
+import '/core/bloc/common.dart';
 import '/core/extension/context_ext.dart';
-import '../../../../core/bloc/common.dart';
-import '../../../indicator/bloc/indicator_bloc.dart';
-import '../../../indicator/data/models/indicator_model.dart';
-import '../../data/models/board_model.dart';
+import '/features/indicator/bloc/indicator_bloc.dart';
+import '/features/indicator/data/models/indicator_model.dart';
+import '/features/main/data/models/board_model.dart';
+import '/shared/components/search_field.dart';
 
 class MainPage extends StatefulWidget {
   const MainPage({super.key});
@@ -21,9 +22,26 @@ class MainPage extends StatefulWidget {
 
 class _MainPageState extends State<MainPage> {
   BoardViewController boardViewController = BoardViewController();
-  ValueNotifier<Map<int, int>> sortNotifier = ValueNotifier({});
 
   late final IndicatorBloc indicatorBloc;
+
+  String? get search => indicatorBloc.state.search;
+
+  List<BoardModel<IndicatorModel>> get allBoard => indicatorBloc.state.items
+      .map(
+        (ind) => ind.copyWith(
+          items: ind.items
+              .where(
+                (item) => search != null
+                    ? item.name.toLowerCase().contains(search!.toLowerCase())
+                    : true,
+              )
+              .toList(),
+        ),
+      )
+      .toList();
+
+  bool get isInit => indicatorBloc.state.status == BlocStatus.success;
 
   @override
   void initState() {
@@ -32,10 +50,8 @@ class _MainPageState extends State<MainPage> {
     indicatorBloc.add(IndicatorGetMoEvent());
   }
 
-  @override
-  void dispose() {
-    sortNotifier.dispose();
-    super.dispose();
+  void handleSearchChanged(String value) {
+    indicatorBloc.add(IndicatorSearchMoEvent(value.isNotEmpty ? value : null));
   }
 
   @override
@@ -51,21 +67,9 @@ class _MainPageState extends State<MainPage> {
                 Container(
                   width: 300,
                   padding: const EdgeInsets.symmetric(vertical: 18),
-                  child: TextField(
-                    enabled: state.status == BlocStatus.success,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      hintText: "Поиск...",
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      prefixIcon: const Icon(Icons.search),
-                    ),
-                    onChanged: (value) {
-                      indicatorBloc.add(
-                        IndicatorSearchMoEvent(value.isNotEmpty ? value : null),
-                      );
-                    },
+                  child: SearchField(
+                    enabled: isInit,
+                    onChanged: handleSearchChanged,
                   ),
                 ),
               ],
@@ -77,23 +81,12 @@ class _MainPageState extends State<MainPage> {
               borderRadius: BorderRadius.circular(16),
               child: ColoredBox(
                 color: context.colors.scrim,
-                child: state.status == BlocStatus.success
-                    ? ValueListenableBuilder(
-                        valueListenable: sortNotifier,
-                        builder: (context, value, child) {
-                          return BoardView(
-                            boardViewController: boardViewController,
-                            lists: state.items
-                                .map(
-                                  (board) => _createBoard(
-                                    board,
-                                    value[board.id] ?? 1,
-                                    state.search,
-                                  ),
-                                )
-                                .toList(),
-                          );
-                        },
+                child: isInit
+                    ? BoardView(
+                        boardViewController: boardViewController,
+                        lists: state.items
+                            .map((board) => _createBoard(board, state.search))
+                            .toList(),
                       )
                     : const Center(child: CircularProgressIndicator()),
               ),
@@ -104,52 +97,19 @@ class _MainPageState extends State<MainPage> {
     );
   }
 
-  // if (state is IndicatorLoaded) {
-  // return ValueListenableBuilder(
-  // valueListenable: sortNotifier,
-  // builder: (context, value, child) {
-  // return BoardView(
-  // boardViewController: boardViewController,
-  // lists: state.boards
-  //     .map(
-  // (board) =>
-  // _createBoard(board, value[board.id] ?? 1),
-  // )
-  //     .toList(),
-  // );
-  // },
-  // );
-  // }
-  // return const Center(child: CircularProgressIndicator());
-  BoardList _createBoard(
-    BoardModel<IndicatorModel> board,
-    int sort,
-    String? search,
-  ) {
-    final sortedItems = board.items
-        .sorted((a, b) {
-          return sort * (a.order > b.order ? 1 : -1);
-        })
+  BoardList _createBoard(BoardModel<IndicatorModel> board, String? search) {
+    final filteredItems = board.items
         .where(
           (item) => search != null
               ? item.name.toLowerCase().contains(search.toLowerCase())
               : true,
-        );
-
-    void onChangeSort() {
-      sortNotifier.value = {...sortNotifier.value, board.id: sort * -1};
-    }
+        )
+        .toList();
 
     return BoardList(
-      key: ValueKey(sort),
+      key: ValueKey(board.id),
       draggable: false,
       backgroundColor: context.colors.surface,
-      // onStartDragList: (listIndex) {
-      //   debugPrint("Start dragging list: $listIndex");
-      // },
-      // onDropList: (listIndex, oldListIndex) {
-      //   debugPrint("Dropped list: $listIndex, old: $oldListIndex");
-      // },
       header: [
         Container(
           padding: const EdgeInsets.all(8),
@@ -158,30 +118,41 @@ class _MainPageState extends State<MainPage> {
             style: TextStyle(fontSize: 20, color: context.colors.primary),
           ),
         ),
-        IconButton(
-          onPressed: onChangeSort,
-          icon: Transform(
-            alignment: Alignment.center,
-            transform: Matrix4.identity()..scale(1.0, sort * -1.0),
-            child: const Icon(Icons.sort),
-          ),
-        ),
       ],
 
-      items: sortedItems
+      items: filteredItems
           .map(
-            (item) => BoardItem(
-              // onStartDragItem: (listIndex, itemIndex, state) {
-              //   debugPrint("Start dragging: $itemIndex from list $listIndex");
-              // },
-              // onDropItem:
-              //     (listIndex, itemIndex, oldListIndex, oldItemIndex, state) {
-              //       debugPrint("Dropped item $itemIndex in list $listIndex");
-              //     },
+            (indicator) => BoardItem(
+              key: ValueKey(indicator.indicatorToMoId),
+              onDropItem:
+                  (listIndex, itemIndex, oldListIndex, oldItemIndex, state) {
+                    if (listIndex != null &&
+                        oldListIndex != null &&
+                        itemIndex != null) {
+                      final parentId = listIndex == oldListIndex
+                          ? indicator.parentId
+                          : allBoard[listIndex].id;
+                      final order =
+                          allBoard[listIndex].items
+                              .firstWhereIndexedOrNull(
+                                (index, _) => index == itemIndex,
+                              )
+                              ?.order ??
+                          (itemIndex + 1);
+
+                      indicatorBloc.add(
+                        IndicatorUpdateMoEvent(
+                          indicatorId: indicator.indicatorToMoId,
+                          parentId: parentId,
+                          order: order,
+                        ),
+                      );
+                    }
+                  },
               item: Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
-                  child: Text(item.name),
+                  child: Text('${indicator.order} - ${indicator.name}'),
                 ),
               ),
             ),

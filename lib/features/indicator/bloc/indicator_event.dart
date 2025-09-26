@@ -13,3 +13,15 @@ class IndicatorSearchMoEvent extends IndicatorEvent {
 
   IndicatorSearchMoEvent(this.search);
 }
+
+class IndicatorUpdateMoEvent extends IndicatorEvent {
+  final int indicatorId;
+  final int parentId;
+  final int order;
+
+  IndicatorUpdateMoEvent({
+    required this.indicatorId,
+    required this.parentId,
+    required this.order,
+  });
+}

@@ -9,4 +9,14 @@ ColorScheme _colorScheme = ColorScheme.fromSeed(
 ThemeData theme = ThemeData(
   colorScheme: _colorScheme,
   scaffoldBackgroundColor: _colorScheme.surfaceBright,
+  iconButtonTheme: IconButtonThemeData(
+    style: ButtonStyle(
+      iconColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.disabled)) {
+          return Colors.white38;
+        }
+        return null;
+      }),
+    ),
+  ),
 );
